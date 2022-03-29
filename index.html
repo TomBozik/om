@@ -28,12 +28,29 @@
 
         <template x-if="userBillsLoaded">
             <div class="py-2 pl-1 flex flex-wrap">
-                <div class="pr-2 font-thin">You have <span x-text="total" class="text-green-600 font-semibold"></span> bills that have a twin:</div>
+                <div class="pr-2 font-thin"><span class="text-red-600">You</span> have <span x-text="total" class="text-green-600 font-semibold"></span> bills that have a twin:</div>
                 <template x-for="bill in userTwins">
                     <div x-text="bill" class="pr-2 text-md font-semibold"></div>
                 </template>
             </div> 
         </template>
+
+        <div class="flex flex-wrap items-center pt-2">
+            <template x-if="jpgLoaded">
+                <div class="ml-2 pr-4 font-thin"> <span class="text-yellow-400">Jpg.store twins:</span></div>
+            </template>
+            <template x-if="!jpgLoaded">
+                <button type="submit" @click="fetchJpgStore()" class="flex bg-green-600 text-dark font-semibold py-2 px-4 mr-2 rounded hover:bg-green-700 mt-2" :class="[ isLoadingJpg ? 'opacity-50 cursor-not-allowed' : 'hover:bg-green-700' ]" :disabled="isLoadingJpg">
+                    Get jpg.store twins
+                </button>
+            </template>
+            <template x-if="isErrorJpg">
+                <div class="pl-4 text-xs font-thin text-red-600" x-text="errorJpg"></div>
+            </template>
+            <template x-for="bill in jpgTwins">
+                <a x-bind:href="bill.url" class="text-gray-300 text-md font-semibold hover:text-yellow-400 text-center pr-2" x-text = "bill.name" target="_blank"></a> 
+            </template>
+        </div>
 
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-1 pt-4">
@@ -42,7 +59,14 @@
                     <img x-bind:src="imgBaseUrl + item.twins[0].name + '.jpg'" class="max-w-full h-auto rounded-md" />
                     <div class="grid grid-cols-3 gap-1 py-2">
                         <template x-for="twin in item.twins">
-                            <a x-bind:href="xessersonBaseUrl + twin.name" :class="{ 'text-red-600': twin.own }" class="text-gray-300 font-semibold hover:text-green-600 text-center" x-text = "twin.name" target="_blank"></a> 
+                            <div class="text-center">  
+                                <template x-if="twin.jpgstore">
+                                    <a x-bind:href="jpgBaseUrl + twin.assetId" :class="{ 'text-yellow-400': twin.jpgstore, 'text-red-600': twin.own}" class="text-gray-300 font-semibold hover:text-green-600 text-center" x-text = "twin.name" target="_blank"></a>
+                                </template>
+                                <template x-if="!twin.jpgstore">
+                                    <a x-bind:href="xessersonBaseUrl + twin.name" :class="{ 'text-yellow-400': twin.jpgstore, 'text-red-600': twin.own}" class="text-gray-300 font-semibold hover:text-green-600 text-center" x-text = "twin.name" target="_blank"></a>
+                                </template>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -70,6 +94,7 @@
             unitBaseUrl: 'https://pool.pm/a5425bd7bc4182325188af2340415827a73f845846c165d9e14c5aed.',
             imgBaseUrl: 'https://old-money-nft.s3.amazonaws.com/2Bill/MintFinal/',
             xessersonBaseUrl: 'https://www.oldmoney.io/print?asset=',
+            jpgBaseUrl: 'https://www.jpg.store/asset/',
             isLoading: false,
             isError: false,
             error: '',
@@ -77,9 +102,16 @@
             userTwins: [],
             userBillsLoaded: false,
             total: 0,
-            fetchBills() {
+
+            isLoadingJpg: false,
+            jpgLoaded: false,
+            isErrorJpg: false,
+            errorJpg: '',
+            jpgPage: 1,
+            jpgTwins: [],
+            async fetchBills() {
                 this.isLoading = true;
-                fetch(`https://pool.pm/wallet/${this.walletSearch}`)
+                await fetch(`https://pool.pm/wallet/${this.walletSearch}`)
                     .then(response => {
                         if (!response.ok) {
                             this.isLoading = false;
@@ -99,10 +131,9 @@
                             this.userBills.push(billName);
 
                             this.twins.forEach(twin_bills => {
-
                                 let obj = twin_bills.twins.find((o, i) => {
                                     if (o.name === billName) {
-                                        twin_bills.twins[i] = { name: twin_bills.twins[i].name, own: true };
+                                        twin_bills.twins[i] = { name: twin_bills.twins[i].name, jpgstore: twin_bills.twins[i].jpgstore, assetId: twin_bills.twins[i].assetId, own: true };
                                         this.total++;
                                         this.userTwins.push(billName);
                                         return true;
@@ -117,7 +148,55 @@
 
                     }).catch(function (err) {
                         console.log(err);
-                    });      
+                    });
+            },
+
+            async fetchJpgStore(){
+                this.isLoadingJpg = true;
+                this.jpgTwins = [];
+                this.jpgPage = 1;
+                while(true){
+                    jpgListings = [];
+                    await fetch('https://server.jpgstoreapis.com/policy/3bcc312ebe7cd9281ab3e3d641bf70f207012e539b0e6e7c3f1560d7/listings?page=' + this.jpgPage)
+                    .then(response => {
+                        if (!response.ok) {
+                            this.isLoadingJpg = false;
+                            this.errorJpg = `Error: ${response.status} - ${response.statusText}`
+                            this.isErrorJpg = true;
+                        }
+                        return response.json()
+                    })
+                    .then((data) => {
+                        jpgListings.push(...data);
+                        this.jpgPage += 1;
+                    }).catch(function (err) {
+                        this.errorJpg = `Error :(`;
+                        this.isErrorJpg = true;
+                        console.log(this.isErrorJpg)
+                    });
+
+                    // zisti, ci sa nachadza nejaky twin v aktualnej davke
+                    jpgListings.forEach(bill => {
+                        let billName = bill['display_name'].replace(/[#. ]/g, "");
+                        let assetId = bill['asset_id'];
+                        this.twins.forEach(twin_bills => {
+                            let obj = twin_bills.twins.find((o, i) => {
+                                if (o.name === billName) {
+                                    twin_bills.twins[i] = { name: twin_bills.twins[i].name, own: twin_bills.twins[i].own, jpgstore: true, assetId: assetId };
+                                    this.jpgTwins.push({'name':billName, 'url': 'https://www.jpg.store/asset/'+ assetId});
+                                    return true;
+                                }
+                            });
+                        });
+                        
+                    });
+
+                    if(jpgListings.length == 0) {
+                        this.isLoadingJpg = false;
+                        this.jpgLoaded = true;
+                        break;
+                    }
+                }
             },
             twins:[
                     {
@@ -126,27 +205,39 @@
                         "twins": [
                             {
                                 "name": "2Bill0042",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0213",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3045",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0241",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1042",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3107",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -156,39 +247,57 @@
                         "twins": [
                             {
                                 "name": "2Bill5082",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0939",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1654",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5657",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5380",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2571",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3052",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1125",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4413",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -198,79 +307,117 @@
                         "twins": [
                             {
                                 "name": "2Bill0202",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3931",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3973",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3772",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4314",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1218",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1425",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2867",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1769",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1460",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1140",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2949",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0336",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3385",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3865",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2772",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0716",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4256",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2032",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -280,19 +427,27 @@
                         "twins": [
                             {
                                 "name": "2Bill3018",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5333",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5282",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2647",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -302,43 +457,63 @@
                         "twins": [
                             {
                                 "name": "2Bill5156",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1746",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5857",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3380",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5386",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1838",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5796",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1972",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5032",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2980",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -348,19 +523,27 @@
                         "twins": [
                             {
                                 "name": "2Bill2878",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3683",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5695",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5490",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -370,43 +553,63 @@
                         "twins": [
                             {
                                 "name": "2Bill3875",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4178",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5647",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2946",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3703",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1702",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2638",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4472",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4093",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0861",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -416,35 +619,51 @@
                         "twins": [
                             {
                                 "name": "2Bill1004",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0941",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3438",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4961",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4330",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0428",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5007",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3262",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -454,59 +673,87 @@
                         "twins": [
                             {
                                 "name": "2Bill1263",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2130",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2002",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1668",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5814",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4380",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1128",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1210",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3292",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4022",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2059",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4362",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0738",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3221",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -516,31 +763,45 @@
                         "twins": [
                             {
                                 "name": "2Bill4120",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4377",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3431",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1959",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4045",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5731",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4546",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -550,63 +811,93 @@
                         "twins": [
                             {
                                 "name": "2Bill4912",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1025",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0258",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2365",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3560",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3912",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0484",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2066",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3031",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0536",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2095",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4747",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3903",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3499",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0657",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -616,31 +907,45 @@
                         "twins": [
                             {
                                 "name": "2Bill3877",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0423",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3961",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3921",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4278",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3584",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1886",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -650,27 +955,39 @@
                         "twins": [
                             {
                                 "name": "2Bill3957",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1598",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4446",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0499",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2288",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2313",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -680,35 +997,51 @@
                         "twins": [
                             {
                                 "name": "2Bill2388",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4873",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0214",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4031",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4372",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4739",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4409",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1162",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -718,19 +1051,27 @@
                         "twins": [
                             {
                                 "name": "2Bill5303",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2562",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0017",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3725",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -740,27 +1081,39 @@
                         "twins": [
                             {
                                 "name": "2Bill0934",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3029",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1974",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2358",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3558",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4552",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -770,59 +1123,87 @@
                         "twins": [
                             {
                                 "name": "2Bill3017",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1747",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5757",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1821",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2142",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3967",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0298",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4932",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4381",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5550",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2925",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2126",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5886",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1120",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -832,19 +1213,27 @@
                         "twins": [
                             {
                                 "name": "2Bill1348",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3444",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4931",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5374",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -854,15 +1243,21 @@
                         "twins": [
                             {
                                 "name": "2Bill3534",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2063",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2720",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -872,19 +1267,27 @@
                         "twins": [
                             {
                                 "name": "2Bill3178",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3779",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0662",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0890",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -894,43 +1297,63 @@
                         "twins": [
                             {
                                 "name": "2Bill4913",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2194",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3337",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1715",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4114",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3987",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5984",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5023",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1356",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2670",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -940,27 +1363,39 @@
                         "twins": [
                             {
                                 "name": "2Bill2411",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0889",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5613",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4899",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0200",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0619",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -970,67 +1405,99 @@
                         "twins": [
                             {
                                 "name": "2Bill0334",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5700",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5205",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5753",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4833",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1997",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4529",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2515",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1017",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2646",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0984",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2008",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2337",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2237",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5745",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2540",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1040,23 +1507,33 @@
                         "twins": [
                             {
                                 "name": "2Bill4113",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4356",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5189",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0146",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0366",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1066,19 +1543,27 @@
                         "twins": [
                             {
                                 "name": "2Bill1605",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4901",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3302",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0948",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1088,31 +1573,45 @@
                         "twins": [
                             {
                                 "name": "2Bill3532",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0441",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4182",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5317",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0341",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4602",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3983",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1122,71 +1621,105 @@
                         "twins": [
                             {
                                 "name": "2Bill0383",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3851",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3733",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5539",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0453",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1966",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4515",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2285",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2801",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5564",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1206",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3758",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3540",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5477",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0290",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1163",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3868",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1196,15 +1729,21 @@
                         "twins": [
                             {
                                 "name": "2Bill2387",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0116",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5906",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1214,27 +1753,39 @@
                         "twins": [
                             {
                                 "name": "2Bill3377",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0679",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1164",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2802",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1282",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1431",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1244,27 +1795,39 @@
                         "twins": [
                             {
                                 "name": "2Bill4221",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2465",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3879",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3589",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3364",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3433",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1274,43 +1837,63 @@
                         "twins": [
                             {
                                 "name": "2Bill3650",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1364",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5073",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2596",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4030",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5679",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4563",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3430",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1141",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3959",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1320,19 +1903,27 @@
                         "twins": [
                             {
                                 "name": "2Bill2421",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2842",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1159",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5366",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1342,11 +1933,15 @@
                         "twins": [
                             {
                                 "name": "2Bill7385",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill7416",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1356,19 +1951,27 @@
                         "twins": [
                             {
                                 "name": "2Bill5992",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4040",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2158",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5838",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1378,15 +1981,21 @@
                         "twins": [
                             {
                                 "name": "2Bill3668",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4957",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3701",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1396,35 +2005,51 @@
                         "twins": [
                             {
                                 "name": "2Bill1021",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2233",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0622",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1888",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5421",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1712",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5916",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1699",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1434,35 +2059,51 @@
                         "twins": [
                             {
                                 "name": "2Bill1305",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3054",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1894",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5579",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3825",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5686",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3441",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1925",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1472,47 +2113,69 @@
                         "twins": [
                             {
                                 "name": "2Bill1380",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5075",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1545",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5812",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2666",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5989",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2255",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4585",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5406",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4162",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5702",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1522,39 +2185,57 @@
                         "twins": [
                             {
                                 "name": "2Bill5100",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4748",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3665",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5743",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5325",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0856",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4224",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4582",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3451",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1564,11 +2245,15 @@
                         "twins": [
                             {
                                 "name": "2Bill6847",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill7089",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1578,39 +2263,57 @@
                         "twins": [
                             {
                                 "name": "2Bill2527",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2477",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2855",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0646",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2997",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0355",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4440",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1114",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2542",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1620,27 +2323,39 @@
                         "twins": [
                             {
                                 "name": "2Bill2868",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3215",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2835",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1750",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0793",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1251",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1650,19 +2365,27 @@
                         "twins": [
                             {
                                 "name": "2Bill3769",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3797",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0503",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4164",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1672,35 +2395,51 @@
                         "twins": [
                             {
                                 "name": "2Bill0474",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3119",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5918",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3757",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3184",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0024",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2133",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4760",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1710,23 +2449,33 @@
                         "twins": [
                             {
                                 "name": "2Bill1067",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3429",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1896",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2385",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4338",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1736,31 +2485,45 @@
                         "twins": [
                             {
                                 "name": "2Bill1591",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5139",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1791",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1872",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1962",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4361",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5622",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1770,19 +2533,27 @@
                         "twins": [
                             {
                                 "name": "2Bill0697",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0899",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2218",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3986",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1792,23 +2563,33 @@
                         "twins": [
                             {
                                 "name": "2Bill1062",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2550",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1132",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4024",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5370",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1818,23 +2599,33 @@
                         "twins": [
                             {
                                 "name": "2Bill2882",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2731",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5481",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5428",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5728",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1844,23 +2635,33 @@
                         "twins": [
                             {
                                 "name": "2Bill4460",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1884",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0846",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2378",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2360",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1870,11 +2671,15 @@
                         "twins": [
                             {
                                 "name": "2Bill6576",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill6715",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1884,11 +2689,15 @@
                         "twins": [
                             {
                                 "name": "2Bill6831",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill6882",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1898,15 +2707,21 @@
                         "twins": [
                             {
                                 "name": "2Bill5010",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0440",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1281",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1916,23 +2731,33 @@
                         "twins": [
                             {
                                 "name": "2Bill1593",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2975",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4475",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5710",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4583",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1942,27 +2767,39 @@
                         "twins": [
                             {
                                 "name": "2Bill2895",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5705",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2178",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2474",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3360",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4892",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1972,15 +2809,21 @@
                         "twins": [
                             {
                                 "name": "2Bill2743",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3059",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5208",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -1990,11 +2833,15 @@
                         "twins": [
                             {
                                 "name": "2Bill6614",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill6782",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2004,23 +2851,33 @@
                         "twins": [
                             {
                                 "name": "2Bill2014",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0912",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4983",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1130",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4692",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2030,15 +2887,21 @@
                         "twins": [
                             {
                                 "name": "2Bill1995",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4557",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4853",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2048,19 +2911,27 @@
                         "twins": [
                             {
                                 "name": "2Bill3406",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4625",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3003",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3145",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2070,15 +2941,21 @@
                         "twins": [
                             {
                                 "name": "2Bill5330",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5012",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0882",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2088,15 +2965,21 @@
                         "twins": [
                             {
                                 "name": "2Bill4251",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3815",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4370",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2106,11 +2989,15 @@
                         "twins": [
                             {
                                 "name": "2Bill6777",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill6572",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2120,19 +3007,27 @@
                         "twins": [
                             {
                                 "name": "2Bill3439",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5377",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5947",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0631",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2142,11 +3037,15 @@
                         "twins": [
                             {
                                 "name": "2Bill2281",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3301",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2156,19 +3055,27 @@
                         "twins": [
                             {
                                 "name": "2Bill4728",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4878",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0562",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2885",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2178,11 +3085,15 @@
                         "twins": [
                             {
                                 "name": "2Bill7066",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill7074",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2192,23 +3103,33 @@
                         "twins": [
                             {
                                 "name": "2Bill1334",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1512",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5258",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5703",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3767",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2218,23 +3139,33 @@
                         "twins": [
                             {
                                 "name": "2Bill3580",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1579",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0827",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5178",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2738",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2244,11 +3175,15 @@
                         "twins": [
                             {
                                 "name": "2Bill3804",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2335",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2258,23 +3193,33 @@
                         "twins": [
                             {
                                 "name": "2Bill5905",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4269",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3874",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0883",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill2608",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2284,11 +3229,15 @@
                         "twins": [
                             {
                                 "name": "2Bill0806",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1731",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2298,19 +3247,27 @@
                         "twins": [
                             {
                                 "name": "2Bill3826",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4721",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill0279",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill5033",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2320,11 +3277,15 @@
                         "twins": [
                             {
                                 "name": "2Bill6894",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill6987",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2334,11 +3295,15 @@
                         "twins": [
                             {
                                 "name": "2Bill0728",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4235",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2348,11 +3313,15 @@
                         "twins": [
                             {
                                 "name": "2Bill3860",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4655",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2362,15 +3331,21 @@
                         "twins": [
                             {
                                 "name": "2Bill1262",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1455",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill4792",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     },
@@ -2380,15 +3355,21 @@
                         "twins": [
                             {
                                 "name": "2Bill3844",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill1375",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             },
                             {
                                 "name": "2Bill3518",
-                                "own": false
+                                "own": false,
+                                "jpgstore": false,
+                                "assetId": ""
                             }
                         ]
                     }
